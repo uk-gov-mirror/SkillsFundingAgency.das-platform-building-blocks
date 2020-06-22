@@ -95,6 +95,7 @@
   },
   "variables": {
     "deploymentUrlBase": "https://raw.githubusercontent.com/SkillsFundingAgency/das-platform-building-blocks/master/templates/",
+    "userAssignedIdentityName": "[concat(parameters('apimName'), '-umi')]",
     "deployCustomHostnames": "[and(greater(length(parameters('portalKeyVaultCertificateName')), 0), greater(length(parameters('gatewayKeyVaultCertificateName')), 0))]",
     "deployToNetwork": "[and(greater(length(parameters('virtualNetworkName')), 0), not(equals(parameters('virtualNetworkType'), 'None')))]",
     "subnetResourceId": "[concat(resourceId(parameters('virtualNetworkResourceGroup'), 'Microsoft.Network/virtualNetworks', parameters('virtualNetworkName')), '/subnets/', parameters('subnetName'))]",
@@ -104,6 +105,23 @@
     "apimManagedIdentityResourceId": "[concat(resourceId('Microsoft.ApiManagement/service', parameters('apimName')),'/providers/Microsoft.ManagedIdentity/Identities/default')]"
   },
   "resources": [
+    {
+      "apiVersion": "2017-05-10",
+      "name": "[concat(parameters('apimName'),'-user-assigned-identity')]",
+      "type": "Microsoft.Resources/deployments",
+      "properties": {
+        "mode": "Incremental",
+        "templateLink": {
+          "uri": "[concat(variables('deploymentUrlBase'),'user-assigned-identity.json')]",
+          "contentVersion": "1.0.0.0"
+        },
+        "parameters": {
+          "userAssignedIdentityName": {
+            "value": "[variables('userAssignedIdentityName')]"
+          }
+        }
+      }
+    },
     {
       "apiVersion": "2019-12-01",
       "name": "[parameters('apimName')]",
@@ -121,7 +139,10 @@
         "virtualNetworkType": "[parameters('virtualNetworkType')]"
       },
       "identity": {
-        "type": "SystemAssigned"
+        "type": "UserAssigned",
+        "userAssignedIdentities": {
+
+        }
       }
     },
     {
@@ -143,8 +164,8 @@
           "accessPolicies": {
             "value": [
               {
-                "tenantId": "[reference(variables('apimManagedIdentityResourceId'), '2015-08-31-PREVIEW').tenantId]",
-                "objectId": "[reference(variables('apimManagedIdentityResourceId'), '2015-08-31-PREVIEW').principalId]",
+                "objectId": "[reference(concat(parameters('apimName'),'-user-assigned-identity')).outputs.objectId.value]",
+                "tenantId": "[reference(concat(parameters('apimName'),'-user-assigned-identity')).outputs.tenantId.value]",
                 "permissions": {
                   "secrets": [
                     "Get"
