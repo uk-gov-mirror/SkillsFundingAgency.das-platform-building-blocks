@@ -5,9 +5,6 @@
     "apimName": {
       "type": "string"
     },
-    "apimInitialDeploy": {
-      "type": "bool"
-    },
     "publisherEmail": {
       "type": "string",
       "minLength": 1,
@@ -101,8 +98,7 @@
     "subnetResourceId": "[concat(resourceId(parameters('virtualNetworkResourceGroup'), 'Microsoft.Network/virtualNetworks', parameters('virtualNetworkName')), '/subnets/', parameters('subnetName'))]",
     "vnetConfiguration": {
       "subnetResourceId": "[variables('subnetResourceId')]"
-    },
-    "apimManagedIdentityResourceId": "[concat(resourceId('Microsoft.ApiManagement/service', parameters('apimName')),'/providers/Microsoft.ManagedIdentity/Identities/default')]"
+    }
   },
   "resources": [
     {
@@ -119,29 +115,6 @@
           "userAssignedIdentityName": {
             "value": "[variables('userAssignedIdentityName')]"
           }
-        }
-      }
-    },
-    {
-      "apiVersion": "2019-12-01",
-      "name": "[parameters('apimName')]",
-      "condition": "[parameters('apimInitialDeploy')]",
-      "type": "Microsoft.ApiManagement/service",
-      "location": "[resourceGroup().location]",
-      "sku": {
-        "name": "[parameters('sku')]",
-        "capacity": "[parameters('skuCount')]"
-      },
-      "properties": {
-        "publisherEmail": "[parameters('publisherEmail')]",
-        "publisherName": "[parameters('publisherName')]",
-        "virtualNetworkConfiguration": "[if(variables('deployToNetwork'), variables('vnetConfiguration'), json('null'))]",
-        "virtualNetworkType": "[parameters('virtualNetworkType')]"
-      },
-      "identity": {
-        "type": "UserAssigned",
-        "userAssignedIdentities": {
-
         }
       }
     },
@@ -177,59 +150,49 @@
         }
       },
       "dependsOn": [
-        "[parameters('apimName')]"
+        "[concat(parameters('apimName'),'-user-assigned-identity')]"
       ]
     },
     {
-      "apiVersion": "2017-05-10",
-      "name": "[concat(parameters('apimName'),'-with-hostname-configurations')]",
-      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2019-12-01",
+      "name": "[parameters('apimName')]",
       "condition": "[variables('deployCustomHostnames')]",
-      "properties": {
-        "mode": "Incremental",
-        "templateLink": {
-          "uri": "[concat(variables('deploymentUrlBase'),'apim/apim-service-with-hostnames.json')]",
-          "contentVersion": "1.0.0.0"
-        },
-        "parameters": {
-          "apimName": {
-            "value": "[parameters('apimName')]"
-          },
-          "publisherEmail": {
-            "value": "[parameters('publisherEmail')]"
-          },
-          "publisherName": {
-            "value": "[parameters('publisherName')]"
-          },
-          "sku": {
-            "value": "[parameters('sku')]"
-          },
-          "skuCount": {
-            "value": "[parameters('skuCount')]"
-          },
-          "portalHostname": {
-            "value": "[parameters('portalHostname')]"
-          },
-          "portalKeyVaultSecretId": {
-            "value": "[if(variables('deployCustomHostnames'), reference(resourceId(parameters('keyVaultResourceGroup'), 'Microsoft.KeyVault/vaults/secrets', parameters('keyVaultName'), parameters('portalKeyVaultCertificateName')), '2018-02-14').secretUriWithVersion, json('null'))]"
-          },
-          "gatewayHostname": {
-            "value": "[parameters('gatewayHostname')]"
-          },
-          "gatewayKeyVaultSecretId": {
-            "value": "[if(variables('deployCustomHostnames'), reference(resourceId(parameters('keyVaultResourceGroup'), 'Microsoft.KeyVault/vaults/secrets', parameters('keyVaultName'), parameters('gatewayKeyVaultCertificateName')), '2018-02-14').secretUriWithVersion, json('null'))]"
-          },
-          "virtualNetworkType": {
-            "value": "[parameters('virtualNetworkType')]"
-          },
-          "subnetResourceId": {
-            "value": "[variables('subnetResourceId')]"
-          }
-        }
-      },
+      "type": "Microsoft.ApiManagement/service",
+      "location": "[resourceGroup().location]",
       "dependsOn": [
         "[concat(parameters('apimName'),'-keyvault-accesspolicy')]"
-      ]
+      ],
+      "sku": {
+        "name": "[parameters('sku')]",
+        "capacity": "[parameters('skuCount')]"
+      },
+      "properties": {
+        "hostnameConfigurations": [
+          {
+            "type": "DeveloperPortal",
+            "hostName": "[parameters('portalHostname')]",
+            "keyVaultId": "[if(variables('deployCustomHostnames'), reference(resourceId(parameters('keyVaultResourceGroup'), 'Microsoft.KeyVault/vaults/secrets', parameters('keyVaultName'), parameters('portalKeyVaultCertificateName')), '2018-02-14').secretUriWithVersion, json('null'))]",
+            "negotiateClientCertificate": false
+          },
+          {
+            "type": "Proxy",
+            "hostName": "[parameters('gatewayHostname')]",
+            "keyVaultId": "[if(variables('deployCustomHostnames'), reference(resourceId(parameters('keyVaultResourceGroup'), 'Microsoft.KeyVault/vaults/secrets', parameters('keyVaultName'), parameters('gatewayKeyVaultCertificateName')), '2018-02-14').secretUriWithVersion, json('null'))]",
+            "negotiateClientCertificate": false
+          }
+        ],
+        "publisherEmail": "[parameters('publisherEmail')]",
+        "publisherName": "[parameters('publisherName')]",
+        "virtualNetworkConfiguration": "[if(variables('deployToNetwork'), variables('vnetConfiguration'), json('null'))]",
+        "virtualNetworkType": "[parameters('virtualNetworkType')]"
+      },
+      "identity": {
+        "type": "UserAssigned",
+        "userAssignedIdentities": {
+          "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities/', variables('userAssignedIdentityName'))]": {
+          }
+        }
+      }
     }
   ]
 }
