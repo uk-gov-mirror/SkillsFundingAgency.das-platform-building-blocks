@@ -16,7 +16,31 @@
       "type": "int",
       "defaultValue": 31,
       "minValue": 31,
-      "maxValue": 90
+      "maxValue": 730,
+      "metadata": {
+        "description": "Analytics (interactive) retention in days. This is the period the data is instantly searchable."
+      }
+    },
+    "totalRetentionInDays": {
+      "type": "int",
+      "defaultValue": -1,
+      "metadata": {
+        "description": "Total retention in days applied to the tables listed in tableNames, between 4 and 4383. Data is held in low cost long term retention between dataRetentionDays and totalRetentionInDays and is retrieved using a search job. -1 defaults to dataRetentionDays and applies no long term retention."
+      }
+    },
+    "tableNames": {
+      "type": "array",
+      "defaultValue": [],
+      "metadata": {
+        "description": "Tables to apply totalRetentionInDays to. A table can only be configured once it exists in the workspace. An empty array deploys no table configuration."
+      }
+    },
+    "dailyQuotaGb": {
+      "type": "int",
+      "defaultValue": -1,
+      "metadata": {
+        "description": "Daily ingestion cap in GB. -1 leaves the cap unmanaged by this template so an existing cap is not reset."
+      }
     },
     "publicNetworkAccessForIngestion": {
       "type": "string",
@@ -33,6 +57,27 @@
         "Enabled",
         "Disabled"
       ]
+    },
+    "disableLocalAuth": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Disables shared key authentication so that only Microsoft Entra authentication is accepted. Defaults to false to preserve the behaviour of workspaces deployed before this parameter existed."
+      }
+    },
+    "enableDataExport": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Enables the workspace data export feature. Required before a data export rule can be created against the workspace."
+      }
+    },
+    "tags": {
+      "type": "object",
+      "defaultValue": {},
+      "metadata": {
+        "description": "Resource tags. An empty object omits the property entirely so that tags applied outside this template are preserved."
+      }
     }
   },
   "variables": {},
@@ -40,8 +85,9 @@
     {
       "name": "[parameters('logAnalyticsWorkspaceName')]",
       "type": "Microsoft.OperationalInsights/workspaces",
-      "apiVersion": "2020-08-01",
+      "apiVersion": "2025-02-01",
       "location": "[resourceGroup().location]",
+      "tags": "[if(empty(parameters('tags')), json('null'), parameters('tags'))]",
       "properties": {
         "sku": {
           "name": "[parameters('logAnalyticsWorkspaceSku')]"
@@ -49,10 +95,29 @@
         "retentionInDays": "[parameters('dataRetentionDays')]",
         "publicNetworkAccessForIngestion": "[parameters('publicNetworkAccessForIngestion')]",
         "publicNetworkAccessForQuery": "[parameters('publicNetworkAccessForQuery')]",
+        "workspaceCapping": "[if(equals(parameters('dailyQuotaGb'), -1), json('null'), createObject('dailyQuotaGb', parameters('dailyQuotaGb')))]",
         "features": {
-          "enableLogAccessUsingOnlyResourcePermissions": true
+          "enableLogAccessUsingOnlyResourcePermissions": true,
+          "disableLocalAuth": "[parameters('disableLocalAuth')]",
+          "enableDataExport": "[parameters('enableDataExport')]"
         }
       }
+    },
+    {
+      "name": "[concat(parameters('logAnalyticsWorkspaceName'), '/', parameters('tableNames')[copyIndex()])]",
+      "type": "Microsoft.OperationalInsights/workspaces/tables",
+      "apiVersion": "2023-09-01",
+      "properties": {
+        "retentionInDays": "[parameters('dataRetentionDays')]",
+        "totalRetentionInDays": "[parameters('totalRetentionInDays')]"
+      },
+      "copy": {
+        "name": "tableRetentionCopy",
+        "count": "[length(parameters('tableNames'))]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('logAnalyticsWorkspaceName'))]"
+      ]
     }
   ],
   "outputs": {

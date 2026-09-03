@@ -1,0 +1,74 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "logAnalyticsWorkspaceName": {
+      "type": "string",
+      "metadata": {
+        "description": "Name of the Log Analytics workspace the data is exported from. The workspace must be deployed with enableDataExport set to true."
+      }
+    },
+    "dataExportRuleName": {
+      "type": "string",
+      "minLength": 4,
+      "maxLength": 63,
+      "metadata": {
+        "description": "Name of the data export rule. Must start with a letter and contain only letters, numbers and hyphens."
+      }
+    },
+    "destinationResourceId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Resource id of the destination storage account or Event Hubs namespace."
+      }
+    },
+    "eventHubName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional Event Hub name. Not applicable when the destination is a storage account. When the destination is an Event Hubs namespace and this is empty, one Event Hub is created per exported table, named am-{tableName}."
+      }
+    },
+    "tableNames": {
+      "type": "array",
+      "defaultValue": [],
+      "metadata": {
+        "description": "Tables to export. Data export cannot filter rows, it exports whole tables from the point the rule is created. An empty array, or an empty destinationResourceId, deploys no rule."
+      }
+    },
+    "enable": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Whether the rule is active once deployed."
+      }
+    }
+  },
+  "variables": {
+    "deployRule": "[and(greater(length(parameters('tableNames')), 0), not(empty(parameters('destinationResourceId'))))]",
+    "destination": {
+      "resourceId": "[parameters('destinationResourceId')]",
+      "metaData": "[if(empty(parameters('eventHubName')), json('null'), createObject('eventHubName', parameters('eventHubName')))]"
+    }
+  },
+  "resources": [
+    {
+      "condition": "[variables('deployRule')]",
+      "name": "[concat(parameters('logAnalyticsWorkspaceName'), '/', parameters('dataExportRuleName'))]",
+      "type": "Microsoft.OperationalInsights/workspaces/dataExports",
+      "apiVersion": "2023-09-01",
+      "properties": {
+        "destination": "[variables('destination')]",
+        "tableNames": "[parameters('tableNames')]",
+        "enable": "[parameters('enable')]"
+      }
+    }
+  ],
+  "outputs": {
+    "dataExportRuleDeployed": {
+      "type": "bool",
+      "value": "[variables('deployRule')]"
+    }
+  }
+}
